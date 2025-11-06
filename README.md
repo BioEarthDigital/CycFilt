@@ -41,15 +41,15 @@ Options:
           Maximum allowed mismatches in adapter alignment [default: 2]
   -d, --max-indels <max_indels>
           Maximum allowed indels in adapter alignment [default: 1]
-  -D, --debug
-          Enable debug output with detailed filtering information
+  -s, --stat
+          Enable per-read statistics and save to <output>.stat.csv.gz
   -h, --help
           Print help
 
 
 e.g.
 cyc_filt -i test.fastq.gz -o test.hq.fq.gz -q 7 -l 1000 -t 4
-cyc_filt -i test.fastq.gz -o test.hq.fq.gz -a GGGTGACAGAGCAAGACCCTGTCTCAGAA  -x 3 -d 1  -D
+cyc_filt -i test.fastq.gz -o test.hq.fq.gz -a GGGTGACAGAGCAAGACCCTGTCTCAGAA  -x 3 -d 1  -s
 
 ```
 
@@ -59,7 +59,12 @@ cyc_filt -i test.fastq.gz -o test.hq.fq.gz -a GGGTGACAGAGCAAGACCCTGTCTCAGAA  -x 
 
 ## Change logs
 
+- V2.1.0 # 20251106
+   
+   - add visualization script, plot_sankey and plot_scatter using CycFqStatPlot.py from stat.csv.gz file
+   
 - V2.0.1 # 20250829
+
    - improve the adapter sequence identification to handle reverse complement cases
 
 - V2.0.0 # 20250826

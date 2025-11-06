@@ -20,7 +20,7 @@ fn filter_fastq_by_quality_and_length(
     min_adapter_match: usize,
     max_mismatches: usize,
     max_indels: usize,
-    debug_mode: bool,
+    stat_enabled: bool,
 ) -> Result<(), IoError> {
     let input_path = std::path::Path::new(input_file);
     let output_path = std::path::Path::new(output_file);
@@ -39,6 +39,28 @@ fn filter_fastq_by_quality_and_length(
     let output_file = File::create(output_path)?;
     let writer = Arc::new(Mutex::new(GzEncoder::new(BufWriter::new(output_file), Compression::default())));
 
+    // stats writer (CSV.gz)
+    let stats_writer: Option<Arc<Mutex<GzEncoder<BufWriter<File>>>>> = if stat_enabled {
+        let out_path = output_path;
+        let parent = out_path.parent().unwrap_or(std::path::Path::new("."));
+        // file_stem removes only the last extension (e.g., .gz), keep multi-part like .fastq
+        let stem = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
+        let stat_filename = format!("{}.stat.csv.gz", stem);
+        let stat_path = parent.join(stat_filename);
+        let f = File::create(stat_path)?;
+        let w = BufWriter::new(f);
+        let gz = GzEncoder::new(w, Compression::default());
+        let w_arc = Arc::new(Mutex::new(gz));
+        // write CSV header
+        {
+            let mut guard = w_arc.lock().unwrap();
+            writeln!(&mut *guard, "read_id,quality,length,has_adapter,quality_pass,length_pass,final_output_count")?;
+        }
+        Some(w_arc)
+    } else {
+        None
+    };
+
     let total_reads = Arc::new(Mutex::new(0));
     let filtered_reads = Arc::new(Mutex::new(0));
 
@@ -54,28 +76,30 @@ fn filter_fastq_by_quality_and_length(
         let batch_end = batch_start + lines.len() / 4;
 
         let writer_clone = Arc::clone(&writer);
-        let (local_total, local_filtered, output_lines) = lines.par_chunks(4)
+        let (local_total, local_filtered, output_lines, stats_lines) = lines.par_chunks(4)
             .fold(
-                || (0, 0, Vec::new()),
-                |(total, mut filtered, mut output_lines), chunk| {
+                || (0, 0, Vec::new(), Vec::new()),
+                |(total, mut filtered, mut output_lines, mut stats_lines), chunk| {
                     let header = &chunk[0];
                     let sequence = &chunk[1];
                     let quality_line = &chunk[3];
-                    let quality_value = match get_quality_value(header) {   
-                        Ok(val) => val,
-                        Err(e) => {
-                            if debug_mode {
-                                eprintln!("DEBUG: Failed to parse quality value from {}: {}", header, e);
-                            }
-                            return (total + chunk.len() / 4, filtered + 1, output_lines);
-                        }
+                    let (quality_value_opt, quality_pass) = match get_quality_value(header) {
+                        Ok(val) => (Some(val), val >= min_quality),
+                        Err(_) => (None, false),
                     };
+                    let length_pass_initial = sequence.len() >= min_length;
+                    let mut final_output_count = 0usize;
+                    let mut has_adapter = false;
 
-                    if quality_value >= min_quality && sequence.len() >= min_length {
+                    if quality_pass && length_pass_initial {
                         if let Some(adapter) = adapter_sequence {
+                            // detect adapter for stats regardless of later trimming
+                            has_adapter = detect_adapter_position(
+                                sequence, adapter, min_adapter_match, max_mismatches, max_indels
+                            ).is_some();
                             let processed_seqs = process_adapter_sequence(
                                 header, sequence, quality_line, adapter, 
-                                min_adapter_match, max_mismatches, max_indels, debug_mode
+                                min_adapter_match, max_mismatches, max_indels
                             );
                             
                             for (processed_header, processed_seq, processed_qual) in processed_seqs {
@@ -84,35 +108,42 @@ fn filter_fastq_by_quality_and_length(
                                     output_lines.push(processed_seq);
                                     output_lines.push("+".to_string());
                                     output_lines.push(processed_qual);
+                                    final_output_count += 1;
                                 } else {
-                                    if debug_mode {
-                                        eprintln!("DEBUG: Filtered {} - trimmed length {} < {}", processed_header, processed_seq.len(), min_length);
-                                    }
                                     filtered += 1;
                                 }
                             }
                         } else {
                             output_lines.extend(chunk.iter().map(|s| s.clone()));
+                            final_output_count = 1;
                         }
                     } else {
-                        if debug_mode {
-                            if quality_value < min_quality {
-                                eprintln!("DEBUG: Filtered {} - quality {} < {}", header, quality_value, min_quality);
-                            } else {
-                                eprintln!("DEBUG: Filtered {} - length {} < {}", header, sequence.len(), min_length);
-                            }
-                        }
                         filtered += 1;
                     }
+                    if stat_enabled {
+                        let qv = quality_value_opt.unwrap_or(f64::NAN);
+                        let stat_line = format!(
+                            "{},{},{},{},{},{},{}",
+                            header, // read_id
+                            qv,     // quality
+                            sequence.len(), // length
+                            if has_adapter { "true" } else { "false" }, // has_adapter
+                            if quality_pass { "true" } else { "false" }, // quality_pass
+                            if length_pass_initial { "true" } else { "false" }, // length_pass
+                            final_output_count // final_output_count
+                        );
+                        stats_lines.push(stat_line);
+                    }
                     
-                    (total + chunk.len() / 4, filtered, output_lines)
+                    (total + chunk.len() / 4, filtered, output_lines, stats_lines)
                 }
             )
             .reduce(
-                || (0, 0, Vec::new()),
-                |(total1, filtered1, mut lines1), (total2, filtered2, lines2)| {
+                || (0, 0, Vec::new(), Vec::new()),
+                |(total1, filtered1, mut lines1, mut stats1), (total2, filtered2, lines2, stats2)| {
                     lines1.extend(lines2);
-                    (total1 + total2, filtered1 + filtered2, lines1)
+                    stats1.extend(stats2);
+                    (total1 + total2, filtered1 + filtered2, lines1, stats1)
                 }
             );
 
@@ -120,6 +151,15 @@ fn filter_fastq_by_quality_and_length(
             let mut writer_guard = writer_clone.lock().unwrap();
             for line in &output_lines {
                 writeln!(&mut *writer_guard, "{}", line)?;
+            }
+        }
+
+        if stat_enabled && !stats_lines.is_empty() {
+            if let Some(sw) = &stats_writer {
+                let mut guard = sw.lock().unwrap();
+                for l in &stats_lines {
+                    writeln!(&mut *guard, "{}", l)?;
+                }
             }
         }
 
@@ -137,6 +177,12 @@ fn filter_fastq_by_quality_and_length(
 
     let mut writer_guard = writer.lock().unwrap();
     writer_guard.flush()?;
+
+    if let Some(sw) = stats_writer {
+        let mut g = sw.lock().unwrap();
+        g.flush()?;
+        // GzEncoder will finalize on drop; flush ensures buffers are written.
+    }
 
     let total_reads = *total_reads.lock().unwrap();
     let filtered_reads = *filtered_reads.lock().unwrap();
@@ -299,16 +345,11 @@ fn process_adapter_sequence(
     min_match: usize,
     max_mismatches: usize,
     max_indels: usize,
-    debug_mode: bool,
 ) -> Vec<(String, String, String)> {
     let mut results = Vec::new();
     
-    if let Some((pos, is_reverse_complement)) = detect_adapter_position(sequence, adapter, min_match, max_mismatches, max_indels) {
-        if debug_mode {
-            let orientation = if is_reverse_complement { "reverse complement" } else { "forward" };
-            eprintln!("DEBUG: Adapter found in {} at position {} ({})", header, pos, orientation);
-        }
-        
+    if let Some((pos, _is_reverse_complement)) = detect_adapter_position(sequence, adapter, min_match, max_mismatches, max_indels) {
+        // Always split at adapter position
         // Always split at adapter position
         let part1_seq = &sequence[..pos];
         let part1_qual = &quality[..pos];
@@ -402,12 +443,12 @@ fn main() {
              .required(false)
              .default_value("1")
              .help("Maximum allowed indels in adapter alignment"))
-        .arg(clap::Arg::new("debug")
-             .short('D')
-             .long("debug")
+        .arg(clap::Arg::new("stat")
+             .short('s')
+             .long("stat")
              .required(false)
              .action(clap::ArgAction::SetTrue)
-             .help("Enable debug output with detailed filtering information"))
+             .help("Enable per-read statistics and save to <output>.stat.csv.gz"))
         .get_matches();
 
     let input_file = matches.get_one::<String>("input_file").unwrap();
@@ -496,7 +537,7 @@ fn main() {
         }
     };
 
-    let debug_mode = matches.get_flag("debug");
+    let stat_enabled = matches.get_flag("stat");
 
     let result = filter_fastq_by_quality_and_length(
         input_file, 
@@ -509,7 +550,7 @@ fn main() {
         min_adapter_match,
         max_mismatches,
         max_indels,
-        debug_mode
+        stat_enabled
     );
 
     if let Err(e) = result {
