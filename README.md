@@ -55,6 +55,18 @@ python scripts/CycFqStatPlot.py \
 - `example/sample.clean.fastq.stat.sankey.html`
 - `example/sample.clean.fastq.stat.sankey.page.pdf`
 
+### 示例图片
+
+散点分布图（质量-长度分布）：
+
+![Scatter 示例](example/sample.clean.fastq.stat.scatter.png)
+
+更多示例与交互查看：
+
+- 合并报告（PDF）：[example/sample.clean.fastq.stat.report.pdf](example/sample.clean.fastq.stat.report.pdf)
+- Sankey 流图（交互版 HTML）：[example/sample.clean.fastq.stat.sankey.html](example/sample.clean.fastq.stat.sankey.html)
+- Sankey 流图页面（PDF）：[example/sample.clean.fastq.stat.sankey.page.pdf](example/sample.clean.fastq.stat.sankey.page.pdf)
+
 ### 生成统计文件示例（参考）
 
 以下为示例运行命令以生成清洗后的 fastq 及统计文件（路径与参数可按需调整）：
