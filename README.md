@@ -59,13 +59,13 @@ python scripts/CycFqStatPlot.py \
 
 散点分布图（质量-长度分布）：
 
-![Scatter 示例](example/sample.clean.fastq.stat.scatter.png)
+![Scatter 示例](example/sample.clean.fastq.stat.csv.scatter.png)
 
 更多示例与交互查看：
 
-- 合并报告（PDF）：[example/sample.clean.fastq.stat.report.pdf](example/sample.clean.fastq.stat.report.pdf)
-- Sankey 流图（交互版 HTML）：[example/sample.clean.fastq.stat.sankey.html](example/sample.clean.fastq.stat.sankey.html)
-- Sankey 流图页面（PDF）：[example/sample.clean.fastq.stat.sankey.page.pdf](example/sample.clean.fastq.stat.sankey.page.pdf)
+- 合并报告（PDF）：[example/sample.clean.fastq.stat.report.pdf](example/sample.clean.fastq.stat.csv.report.pdf)
+- Sankey 流图（交互版 HTML）：[example/sample.clean.fastq.stat.sankey.html](example/sample.clean.fastq.stat.csv.sankey.html)
+- Sankey 流图页面（PDF）：[example/sample.clean.fastq.stat.sankey.page.pdf](example/sample.clean.fastq.stat.csv.sankey.page.pdf)
 
 ### 生成统计文件示例（参考）
 
