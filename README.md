@@ -1,4 +1,78 @@
 # CycFilt
+
+## 可视化统计与报告
+
+本项目提供了一个可视化脚本用于对过滤统计结果进行图形化展示并生成报告：`scripts/CycFqStatPlot.py`。它会根据过滤时的质量阈值与长度阈值绘制散点分布图，并生成过滤流程的 Sankey 流图，最后合并为一个 PDF 报告。
+
+### 依赖
+
+- Python 3.8+
+- 必需：`pandas`、`numpy`、`matplotlib`、`pypdf`
+- 可选（用于 Sankey 图和其 PDF 导出）：`plotly`、`kaleido`
+
+安装示例：
+
+```
+pip install pandas numpy matplotlib pypdf plotly kaleido
+```
+
+### 输入数据
+
+- 可视化脚本读取过滤统计文件：`xxx.stat.csv` 或 `xxx.stat.csv.gz`。
+- 统计文件需包含以下列：`read_id`, `quality`, `length`, `has_adapter`, `quality_pass`, `length_pass`, `final_output_count`。
+
+通常在运行主程序完成过滤后会生成上述统计文件（示例见 `example/sample.clean.fastq.stat.csv.gz`；仓库也提供了解压后的 `.csv`）。
+
+### 用法
+
+```
+python scripts/CycFqStatPlot.py \
+  --csv example/sample.clean.fastq.stat.csv \
+  --min-quality 10 \
+  --min-length 1000 \
+  --out-dir example
+```
+
+- `--csv`：统计文件路径（支持 `.csv` 与 `.csv.gz`）。
+- `--min-quality`：过滤时使用的质量阈值（与主程序保持一致）。
+- `--min-length`：过滤时使用的长度阈值（单位 bp，与主程序保持一致）。
+- `--out-dir`：输出目录（默认与统计文件同目录）。
+
+脚本会生成如下文件：
+
+- 散点图（PNG）：`xxx.stat.scatter.png`
+- 散点图页面（PDF）：`xxx.stat.scatter.page.pdf`
+- Sankey 流图（HTML）：`xxx.stat.sankey.html`
+- Sankey 流图页面（PDF，需 `kaleido`）：`xxx.stat.sankey.page.pdf`
+- 合并报告（PDF）：`xxx.stat.report.pdf`
+
+### 示例输出
+
+仓库中已提供示例输出：
+
+- `example/sample.clean.fastq.stat.report.pdf`
+- `example/sample.clean.fastq.stat.scatter.page.pdf`
+- `example/sample.clean.fastq.stat.sankey.html`
+- `example/sample.clean.fastq.stat.sankey.page.pdf`
+
+### 生成统计文件示例（参考）
+
+以下为示例运行命令以生成清洗后的 fastq 及统计文件（路径与参数可按需调整）：
+
+```
+../target/debug/cyc_filt \
+  -i example/sample.fastq \
+  -o example/sample.clean.fastq.gz \
+  -a AATTTAAGTGAAATGCTAAAATCAAAGGTTATGAA \
+  -x 3 -d 1 -s
+```
+
+其中 `-s` 用于开启每条读的统计，并将统计保存为 `<输出文件名>.stat.csv.gz`；其他参数含义以主程序帮助为准。完成后在 `example/` 目录可看到 `sample.clean.fastq.stat.csv.gz`（仓库同时提供了解压版 `.csv`），再使用上文的可视化脚本生成图与报告。
+
+### 备注
+
+- 若未安装 `plotly` 或其静态导出依赖（如 `kaleido`），将仅生成 Sankey 的 HTML 文件，Sankey 的 PDF 页面可能无法导出。
+- 请确保在可视化时设置的 `--min-quality`、`--min-length` 与实际过滤过程保持一致，以便图中阈值线与结果一致。
 tiny tool for CycloneSEQ reads filtering
 
 
