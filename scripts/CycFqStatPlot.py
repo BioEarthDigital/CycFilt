@@ -48,8 +48,15 @@ def plot_scatter(df: pd.DataFrame, min_quality: float, min_length: int, out_path
     colors = np.where(df['has_adapter'], 'red', 'steelblue')
 
     # Layout with marginal density plots (top for X, right for Y)
-    fig = plt.figure(figsize=(8, 6))
-    gs = fig.add_gridspec(2, 2, width_ratios=[4, 1.2], height_ratios=[1.2, 4], wspace=0.05, hspace=0.05)
+    fig = plt.figure(figsize=(8, 6), constrained_layout=True)
+    # Increase spacing between main scatter and marginal density plots to avoid overlap with ticks/border
+    gs = fig.add_gridspec(
+        2, 2,
+        width_ratios=[4, 1.6],
+        height_ratios=[1.6, 4],
+        wspace=0.10,
+        hspace=0.10
+    )
     ax = fig.add_subplot(gs[1, 0])
     ax_top = fig.add_subplot(gs[0, 0], sharex=ax)
     ax_right = fig.add_subplot(gs[1, 1], sharey=ax)
@@ -60,7 +67,8 @@ def plot_scatter(df: pd.DataFrame, min_quality: float, min_length: int, out_path
     ax.set_ylabel('Length (kb)', fontweight='bold')
 
     # Fixed kb ticks (non-log)
-    base_ticks = [1, 5, 10, 20, 25, 50, 100]
+    # Add 15 kb to the fixed ticks
+    base_ticks = [1, 5, 10, 15, 20, 25, 50, 100]
     try:
         y_max_data = np.nanmax(l_kb.values)
     except Exception:
@@ -144,6 +152,14 @@ def plot_scatter(df: pd.DataFrame, min_quality: float, min_length: int, out_path
     ax_top.grid(False)
     for spine in ['right', 'top']:
         ax_top.spines[spine].set_visible(False)
+    # Add small internal margin so the density curve does not touch the frame
+    ax_top.margins(x=0.06)
+    try:
+        ymax_top = float(np.nanmax(dx))
+        if np.isfinite(ymax_top) and ymax_top > 0:
+            ax_top.set_ylim(0, ymax_top * 1.08)
+    except Exception:
+        pass
 
     # Right: density of length (Y) plotted horizontally
     color_right = '#41ab5d'  # green
@@ -155,10 +171,18 @@ def plot_scatter(df: pd.DataFrame, min_quality: float, min_length: int, out_path
     ax_right.grid(False)
     for spine in ['top', 'right']:
         ax_right.spines[spine].set_visible(False)
+    # Add small internal margin so the density curve does not touch the frame
+    ax_right.margins(y=0.06)
+    try:
+        xmax_right = float(np.nanmax(dy))
+        if np.isfinite(xmax_right) and xmax_right > 0:
+            ax_right.set_xlim(0, xmax_right * 1.08)
+    except Exception:
+        pass
 
     # Main axis cosmetics
     ax.grid(True, linestyle=':', alpha=0.4)
-    fig.tight_layout()
+    # Use constrained_layout instead of tight_layout to avoid warnings with gridspec/shared axes
 
     # Save PNG for convenience, and return figure for PDF assembly
     if out_path:
